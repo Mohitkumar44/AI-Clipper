@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlparse
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QCloseEvent
@@ -26,12 +27,33 @@ from src.application.models import ApplicationProgress, ApplicationRequest
 
 from .controller import GenerationController
 from .dialogs.settings_dialog import SettingsDialog
-from .exceptions import ApplicationExecutionError, GuiError
+from .exceptions import ApplicationExecutionError, GuiError, InvalidGenerationFormError
 from .models import GenerationFormData, GenerationStatus, GenerationViewState
 
 
 RequestFactory = Callable[[GenerationFormData], ApplicationRequest]
 SettingsDialogFactory = Callable[[QWidget], SettingsDialog]
+FormValidator = Callable[[GenerationFormData], None]
+
+YOUTUBE_HOSTS = frozenset(
+    {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
+)
+
+
+def validate_generation_form(form_data: GenerationFormData) -> None:
+    """Validate UI-owned input shape before request composition begins.
+
+    Args:
+        form_data: Immutable values collected from the generation form.
+
+    Raises:
+        InvalidGenerationFormError: If the URL or output directory is unsuitable.
+    """
+    parsed_url = urlparse(form_data.source_url)
+    if parsed_url.scheme not in {"http", "https"} or parsed_url.hostname not in YOUTUBE_HOSTS:
+        raise InvalidGenerationFormError("Enter a valid YouTube URL.")
+    if not form_data.output_directory.is_dir():
+        raise InvalidGenerationFormError("Select an existing output directory.")
 
 
 class DialogPresenter(Protocol):
@@ -74,6 +96,7 @@ class MainWindow(QMainWindow):
         request_factory: RequestFactory,
         dialog_presenter: DialogPresenter | None = None,
         settings_dialog_factory: SettingsDialogFactory = SettingsDialog,
+        form_validator: FormValidator = validate_generation_form,
     ) -> None:
         """Build the window from injected presentation collaborators.
 
@@ -82,12 +105,14 @@ class MainWindow(QMainWindow):
             request_factory: Composition-layer adapter that creates application requests.
             dialog_presenter: Optional safe dialog implementation.
             settings_dialog_factory: Factory for the placeholder settings dialog.
+            form_validator: UI-boundary validator invoked before request composition.
         """
         super().__init__()
         self._controller = controller
         self._request_factory = request_factory
         self._dialog_presenter = dialog_presenter or QtDialogPresenter()
         self._settings_dialog_factory = settings_dialog_factory
+        self._form_validator = form_validator
         self._url_input = QLineEdit(self)
         self._output_input = QLineEdit(self)
         self._settings_button = QPushButton("Settings", self)
@@ -154,9 +179,13 @@ class MainWindow(QMainWindow):
     def _submit_generation(self) -> None:
         """Build and submit one request without executing work in the UI thread."""
         try:
-            request = self._request_factory(self.form_data())
+            form_data = self.form_data()
+            self._form_validator(form_data)
+            request = self._request_factory(form_data)
             self.generation_requested.emit(request)
             self._controller.start_generation(request)
+        except InvalidGenerationFormError as error:
+            self._show_error("Invalid generation request", str(error))
         except (GuiError, ApplicationExecutionError) as error:
             self._show_error("Generation unavailable", str(error))
         except Exception:
