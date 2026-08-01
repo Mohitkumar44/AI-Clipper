@@ -1,0 +1,1 @@
+"""AI Clipper application package."""

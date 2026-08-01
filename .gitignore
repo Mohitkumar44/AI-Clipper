@@ -1,0 +1,26 @@
+# Python bytecode and tooling
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Virtual environments and secrets
+.venv/
+.env
+
+# Application-generated files
+downloads/
+output/
+temp/
+logs/
+
+# Editor and operating system artifacts
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
