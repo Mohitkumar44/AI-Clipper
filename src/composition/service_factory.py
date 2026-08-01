@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from src.analyzer.models import AnalysisConfig
@@ -153,7 +153,10 @@ class ServiceFactory:
             output_directory = form_data.output_directory or self._settings.default_output_directory
             pipeline_request = PipelineRequest(
                 source_url=form_data.source_url,
-                download_config=self._request_defaults.download_config,
+                download_config=replace(
+                    self._request_defaults.download_config,
+                    output_directory=output_directory,
+                ),
                 transcript_config=self._request_defaults.transcript_config,
                 analysis_config=self._request_defaults.analysis_config,
                 clip_configuration=ClipConfiguration(output_directory),

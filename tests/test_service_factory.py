@@ -65,6 +65,7 @@ def test_request_factory_creates_an_application_request_from_gui_data() -> None:
     request = graph.request_factory(GenerationFormData("https://youtu.be/abc123", Path("chosen-output")))
     pipeline_request = request.pipeline_request
     assert pipeline_request.source_url == "https://youtu.be/abc123"
+    assert pipeline_request.download_config.output_directory == Path("chosen-output")
     assert pipeline_request.clip_configuration.output_directory == Path("chosen-output")
     assert pipeline_request.analyzer_name == "openai"
     assert pipeline_request.transcription_backend_name == "faster-whisper"
