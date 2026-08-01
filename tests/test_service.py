@@ -62,7 +62,7 @@ def downloader(tmp_path: Path) -> VideoDownloader:
 
 
 @pytest.fixture
-def request(tmp_path: Path) -> DownloadRequest:
+def download_request(tmp_path: Path) -> DownloadRequest:
     """Build a valid request whose output directory is a pytest temporary path."""
     return DownloadRequest(
         source_url="https://www.youtube.com/watch?v=abc123",
@@ -70,35 +70,37 @@ def request(tmp_path: Path) -> DownloadRequest:
     )
 
 
-def test_get_metadata_returns_typed_metadata(downloader: VideoDownloader, request: DownloadRequest) -> None:
+def test_get_metadata_returns_typed_metadata(
+    downloader: VideoDownloader, download_request: DownloadRequest
+) -> None:
     """Metadata extraction is fully handled by the mocked yt-dlp adapter."""
     FakeYoutubeDL.response = _provider_info()
-    metadata = downloader.get_metadata(request)
+    metadata = downloader.get_metadata(download_request)
     assert metadata.video_id == "abc123"
     assert metadata.title == "Test Video"
     assert FakeYoutubeDL.instances[0].options["noplaylist"] is True
 
 
 def test_get_metadata_translates_unavailable_provider_error(
-    downloader: VideoDownloader, request: DownloadRequest
+    downloader: VideoDownloader, download_request: DownloadRequest
 ) -> None:
     """Provider errors never escape the service implementation boundary."""
     FakeYoutubeDL.error = RuntimeError("This video is private")
     with pytest.raises(VideoUnavailableError):
-        downloader.get_metadata(request)
+        downloader.get_metadata(download_request)
 
 
 def test_get_metadata_translates_generic_provider_error(
-    downloader: VideoDownloader, request: DownloadRequest
+    downloader: VideoDownloader, download_request: DownloadRequest
 ) -> None:
     """Unclassified provider failures become a downloader metadata error."""
     FakeYoutubeDL.error = RuntimeError("temporary provider failure")
     with pytest.raises(MetadataRetrievalError):
-        downloader.get_metadata(request)
+        downloader.get_metadata(download_request)
 
 
 def test_download_video_returns_result_and_emits_progress(
-    downloader: VideoDownloader, request: DownloadRequest, tmp_path: Path
+    downloader: VideoDownloader, download_request: DownloadRequest, tmp_path: Path
 ) -> None:
     """A mocked completed provider response produces a stable result contract."""
     output_path = tmp_path / "Test_Video_abc123.mp4"
@@ -106,7 +108,7 @@ def test_download_video_returns_result_and_emits_progress(
     FakeYoutubeDL.response = _provider_info(output_path)
     progress_events: list[DownloadProgress] = []
 
-    result = downloader.download_video(request, progress_events.append)
+    result = downloader.download_video(download_request, progress_events.append)
 
     assert result.local_path == output_path.resolve()
     assert result.metadata.video_id == "abc123"
@@ -118,11 +120,13 @@ def test_download_video_returns_result_and_emits_progress(
     ]
 
 
-def test_download_video_translates_provider_error(downloader: VideoDownloader, request: DownloadRequest) -> None:
+def test_download_video_translates_provider_error(
+    downloader: VideoDownloader, download_request: DownloadRequest
+) -> None:
     """Download failures are exposed as a domain exception, not yt-dlp errors."""
     FakeYoutubeDL.error = RuntimeError("network failure")
     with pytest.raises(DownloadFailedError):
-        downloader.download_video(request)
+        downloader.download_video(download_request)
 
 
 @pytest.mark.parametrize(
@@ -141,14 +145,14 @@ def test_format_selection_uses_validated_preferences(
 
 
 def test_download_video_rejects_output_path_outside_configured_directory(
-    downloader: VideoDownloader, request: DownloadRequest, tmp_path: Path
+    downloader: VideoDownloader, download_request: DownloadRequest, tmp_path: Path
 ) -> None:
     """A provider-reported path cannot escape the configured output directory."""
     outside_path = tmp_path.parent / "outside.mp4"
     outside_path.touch()
     FakeYoutubeDL.response = _provider_info(outside_path)
     with pytest.raises(DownloadFailedError, match="outside the output directory"):
-        downloader.download_video(request)
+        downloader.download_video(download_request)
 
 
 def _provider_info(output_path: Path | None = None) -> dict[str, Any]:
